@@ -12,6 +12,7 @@ COLOR_RANGES = {
     "red":    [([0, 100, 100], [10, 255, 255]), ([170, 100, 100], [180, 255, 255])],
 }
 
+# Detect color within a masked area
 def color_detection(hsv_img, lower_bound, upper_bound, mask):
     lower = np.array(lower_bound, dtype=np.uint8)
     upper = np.array(upper_bound, dtype=np.uint8)
@@ -19,6 +20,7 @@ def color_detection(hsv_img, lower_bound, upper_bound, mask):
     mask_color = cv2.bitwise_and(mask_color, mask_color, mask=mask)
     return np.sum(mask_color)
 
+# Determine the dominant color in the masked area
 def detect_color(hsv_img, mask):
     best_color = "unknown"
     best_value = 0
@@ -39,6 +41,7 @@ def detect_color(hsv_img, mask):
             best_color = name
     return best_color
 
+# Classify shape based on contour
 def classify_shape(contour):
     peri = cv2.arcLength(contour, True)
     if peri == 0:
@@ -48,14 +51,16 @@ def classify_shape(contour):
     if area < 100:
         return None, None
     v = len(approx)
+
+    # classify based on number of vertices
     if v == 3:
         return "Triangle", approx
     if v == 4:
-        pts = approx.reshape(-1, 2).astype(np.float32)
-        d01 = np.linalg.norm(pts[0] - pts[1])
+        pts = approx.reshape(-1, 2).astype(np.float32)  
+        d01 = np.linalg.norm(pts[0] - pts[1])       
         d12 = np.linalg.norm(pts[1] - pts[2])
-        ratio = d01 / d12 if d12 != 0 else 0
-        if 0.85 <= ratio <= 1.15:
+        ratio = d01 / d12 if d12 != 0 else 0        
+        if 0.85 <= ratio <= 1.15:       # approximately square
             return "Square", approx
         return "Rectangle", approx
     if v > 4:
@@ -67,7 +72,9 @@ def classify_shape(contour):
                 return "Circle", approx
     return None, None
 
+# Annotate image with shape and color labels
 def annotate(img, cnt, shape_label, color_label):
+
     # bounding box of the shape
     x, y, w, h = cv2.boundingRect(cnt)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -101,6 +108,7 @@ def annotate(img, cnt, shape_label, color_label):
     cv2.putText(img, color_text, (center_x, center_y),
                 font, scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
+
 def process(image_path, save_path="result_shapes.png", show=True):
     # load image
     img = cv2.imread(image_path)
@@ -109,18 +117,18 @@ def process(image_path, save_path="result_shapes.png", show=True):
         return
     out = img.copy()
 
-    # preprocessing
+    # preprocess image to find edges
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (7, 7), 0)
-    edges = cv2.Canny(blur, 50, 150)
+    edges = cv2.Canny(blur, 100, 200)
     edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=2)
 
-    # find contours
+    # find contours and convert to HSV
     cnts, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
 
-    # shape and color detection
+    # shape and color detection and annotation 
     for c in cnts:
         label, _ = classify_shape(c)
         if not label:
@@ -133,11 +141,11 @@ def process(image_path, save_path="result_shapes.png", show=True):
             cv2.drawContours(out, [c], -1, (0, 0, 0), 2)
             cv2.drawContours(out, [c], -1, (255, 255, 255), 1)
 
-    # save result
+    # save result image
     cv2.imwrite(save_path, out)
     print(f"saved to {save_path}")
 
-    # show window
+    # show window with result
     if show:
         cv2.namedWindow("result", cv2.WINDOW_NORMAL)
         cv2.imshow("result", out)
